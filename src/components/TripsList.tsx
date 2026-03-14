@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
-import { Trip, TripStatus } from '../types';
+import type { User } from 'firebase/auth';
+import type { Trip, TripStatus } from '../types';
 import { subscribeTrips, createTrip, deleteTrip } from '../services/tripService';
 import { Plus, Plane, Calendar, Users, Trash2, ChevronLeft } from 'lucide-react';
 
@@ -56,7 +56,7 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
         collaborators: [],
         members: [user.uid],
         createdAt: Date.now(),
-      } as Trip & { members: string[] });
+      } as unknown as Trip & { members: string[] });
       setForm(EMPTY_FORM);
       setShowForm(false);
     } finally {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TripPayment, PaymentCategory, PaymentStatus } from '../types';
+import type { TripPayment, PaymentCategory, PaymentStatus } from '../types';
 import { subscribePayments, addPayment, deletePayment } from '../services/tripService';
 import { Plus, Wallet, Trash2 } from 'lucide-react';
 

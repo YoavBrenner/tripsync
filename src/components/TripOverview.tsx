@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trip, TripStatus } from '../types';
+import type { Trip, TripStatus } from '../types';
 import { updateTrip } from '../services/tripService';
 import { Calendar, Users, MapPin, Globe, Pencil, Check, X } from 'lucide-react';
 

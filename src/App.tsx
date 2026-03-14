@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
 import TripsList from './components/TripsList';
 import TripDetail from './components/TripDetail';
-import { Trip } from './types';
+import type { Trip } from './types';
 import { Plane, LogOut, LogIn } from 'lucide-react';
 
 const App: React.FC = () => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TripLink, LinkCategory } from '../types';
+import type { TripLink, LinkCategory } from '../types';
 import { subscribeLinks, addLink, deleteLink } from '../services/tripService';
 import { Plus, Link2, Trash2, ExternalLink } from 'lucide-react';
 

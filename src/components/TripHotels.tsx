@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TripAccommodation, AccommodationType } from '../types';
+import type { TripAccommodation, AccommodationType } from '../types';
 import { subscribeHotels, addHotel, deleteHotel } from '../services/tripService';
 import { Plus, Building2, Trash2, ExternalLink } from 'lucide-react';
 

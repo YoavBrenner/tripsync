@@ -1,10 +1,10 @@
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, Unsubscribe,
-  getDoc, setDoc,
+  onSnapshot, query, where, orderBy,
 } from 'firebase/firestore';
+import type { Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Trip, TripFlight, TripAccommodation, TripPayment, TripLink } from '../types';
+import type { Trip, TripFlight, TripAccommodation, TripPayment, TripLink } from '../types';
 
 // ── Trips ──────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,8 @@ export async function addSubItem<T extends object>(tripId: string, name: string,
 }
 
 export async function updateSubItem<T extends object>(tripId: string, name: string, itemId: string, data: Partial<T>): Promise<void> {
-  await updateDoc(subDoc(tripId, name, itemId), data);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await updateDoc(subDoc(tripId, name, itemId), data as any);
 }
 
 export async function deleteSubItem(tripId: string, name: string, itemId: string): Promise<void> {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TripFlight, FlightDirection } from '../types';
+import type { TripFlight, FlightDirection } from '../types';
 import { subscribeFlights, addFlight, deleteFlight } from '../services/tripService';
 import { Plus, Plane, Trash2, ExternalLink } from 'lucide-react';
 

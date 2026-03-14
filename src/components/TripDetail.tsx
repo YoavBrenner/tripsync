@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { User } from 'firebase/auth';
-import { Trip } from '../types';
+import type { User } from 'firebase/auth';
+import type { Trip } from '../types';
 import { ChevronRight } from 'lucide-react';
 import TripOverview from './TripOverview';
 import TripFlights from './TripFlights';
