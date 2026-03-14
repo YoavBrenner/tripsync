@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Trip, TripStatus } from '../types';
 import { updateTrip } from '../services/tripService';
-import { Calendar, Users, MapPin, Globe, Pencil, Check, X } from 'lucide-react';
+import { Calendar, Users, MapPin, Globe, Pencil, Check, X, Map } from 'lucide-react';
 
 interface Props {
   trip: Trip;
@@ -283,6 +283,21 @@ const TripOverview: React.FC<Props> = ({ trip, onTripUpdated }) => {
             </div>
           </div>
         </div>
+
+        {/* Google Maps link */}
+        {(trip.countries.length > 0 || trip.cities.length > 0) && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <a
+              href={`https://www.google.com/maps/search/${encodeURIComponent([...trip.cities, ...trip.countries].join(', '))}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-sm text-slate-600 hover:text-blue-600 transition-all font-medium"
+            >
+              <Map className="w-4 h-4" />
+              פתח במפה
+            </a>
+          </div>
+        )}
 
         {trip.notes && (
           <div className="mt-4 pt-4 border-t border-slate-100">

@@ -11,7 +11,69 @@ const STATUS_LABEL: Record<TripStatus, { label: string; color: string }> = {
   completed: { label: 'הסתיים',        color: 'bg-slate-100 text-slate-500'  },
 };
 
-const EMOJIS = ['✈️','🌍','🏖️','🏔️','🗺️','🌴','🏛️','🗽','🎡','🚢','🏕️','🌊'];
+// Country name (Hebrew or common) → flag emoji
+const COUNTRY_FLAG: Record<string, string> = {
+  'ישראל': '🇮🇱', 'israel': '🇮🇱',
+  'איטליה': '🇮🇹', 'italy': '🇮🇹', 'italia': '🇮🇹',
+  'צרפת': '🇫🇷', 'france': '🇫🇷',
+  'ספרד': '🇪🇸', 'spain': '🇪🇸', 'espana': '🇪🇸',
+  'יוון': '🇬🇷', 'greece': '🇬🇷',
+  'פורטוגל': '🇵🇹', 'portugal': '🇵🇹',
+  'הולנד': '🇳🇱', 'netherlands': '🇳🇱', 'holland': '🇳🇱',
+  'בלגיה': '🇧🇪', 'belgium': '🇧🇪',
+  'שווייץ': '🇨🇭', 'switzerland': '🇨🇭',
+  'אוסטריה': '🇦🇹', 'austria': '🇦🇹',
+  'גרמניה': '🇩🇪', 'germany': '🇩🇪',
+  'צ\'כיה': '🇨🇿', 'czech': '🇨🇿', 'prague': '🇨🇿',
+  'פולין': '🇵🇱', 'poland': '🇵🇱',
+  'הונגריה': '🇭🇺', 'hungary': '🇭🇺',
+  'רומניה': '🇷🇴', 'romania': '🇷🇴',
+  'קרואטיה': '🇭🇷', 'croatia': '🇭🇷',
+  'סלובניה': '🇸🇮', 'slovenia': '🇸🇮',
+  'טורקיה': '🇹🇷', 'turkey': '🇹🇷',
+  'מצרים': '🇪🇬', 'egypt': '🇪🇬',
+  'ירדן': '🇯🇴', 'jordan': '🇯🇴',
+  'יפן': '🇯🇵', 'japan': '🇯🇵',
+  'תאילנד': '🇹🇭', 'thailand': '🇹🇭',
+  'בלי': '🇧🇱', 'bali': '🇮🇩', 'אינדונזיה': '🇮🇩',
+  'וייטנאם': '🇻🇳', 'vietnam': '🇻🇳',
+  'הודו': '🇮🇳', 'india': '🇮🇳',
+  'ארה"ב': '🇺🇸', 'usa': '🇺🇸', 'אמריקה': '🇺🇸', 'america': '🇺🇸',
+  'קנדה': '🇨🇦', 'canada': '🇨🇦',
+  'מקסיקו': '🇲🇽', 'mexico': '🇲🇽',
+  'ברזיל': '🇧🇷', 'brazil': '🇧🇷',
+  'ארגנטינה': '🇦🇷', 'argentina': '🇦🇷',
+  'אנגליה': '🇬🇧', 'england': '🇬🇧', 'uk': '🇬🇧', 'britain': '🇬🇧',
+  'אירלנד': '🇮🇪', 'ireland': '🇮🇪',
+  'סקוטלנד': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  'נורבגיה': '🇳🇴', 'norway': '🇳🇴',
+  'שבדיה': '🇸🇪', 'sweden': '🇸🇪',
+  'דנמרק': '🇩🇰', 'denmark': '🇩🇰',
+  'פינלנד': '🇫🇮', 'finland': '🇫🇮',
+  'אוסטרליה': '🇦🇺', 'australia': '🇦🇺',
+  'ניו זילנד': '🇳🇿', 'new zealand': '🇳🇿',
+  'דובאי': '🇦🇪', 'dubai': '🇦🇪', 'אמירויות': '🇦🇪',
+  'מרוקו': '🇲🇦', 'morocco': '🇲🇦',
+  'דרום אפריקה': '🇿🇦', 'south africa': '🇿🇦',
+  'קניה': '🇰🇪', 'kenya': '🇰🇪',
+  'טנזניה': '🇹🇿', 'tanzania': '🇹🇿',
+};
+
+function getCountryFlag(countries: string): string {
+  const first = countries.split(',')[0].trim().toLowerCase();
+  return COUNTRY_FLAG[first] || COUNTRY_FLAG[countries.trim().toLowerCase()] || '✈️';
+}
+
+function autoName(countries: string, startDate: string): string {
+  const country = countries.split(',')[0].trim();
+  const year = startDate ? new Date(startDate).getFullYear() : new Date().getFullYear();
+  return country ? `${country} ${year}` : '';
+}
+
+function fmtDate(d: string) {
+  if (!d) return '';
+  return d.split('-').reverse().join('/');
+}
 
 interface Props {
   user: User;
@@ -19,9 +81,9 @@ interface Props {
 }
 
 const EMPTY_FORM = {
-  name: '', countries: '', cities: '', startDate: '', endDate: '',
+  countries: '', cities: '', startDate: '', endDate: '',
   travelers: '2', travelerNames: '', status: 'planning' as TripStatus,
-  coverEmoji: '✈️', notes: '',
+  notes: '', nameOverride: '',
 };
 
 const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
@@ -29,6 +91,7 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,12 +100,17 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
 
   const f = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
+  // Auto-computed values
+  const autoFlag = form.countries ? getCountryFlag(form.countries) : '✈️';
+  const autoTripName = form.nameOverride || autoName(form.countries, form.startDate);
+
   const handleCreate = async () => {
-    if (!form.name.trim()) return;
+    if (!form.countries.trim() && !form.nameOverride.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       await createTrip({
-        name: form.name.trim(),
+        name: autoTripName || form.countries.trim(),
         countries: form.countries.split(',').map(s => s.trim()).filter(Boolean),
         cities: form.cities.split(',').map(s => s.trim()).filter(Boolean),
         startDate: form.startDate,
@@ -50,7 +118,7 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
         travelers: parseInt(form.travelers) || 2,
         travelerNames: form.travelerNames.split(',').map(s => s.trim()).filter(Boolean),
         status: form.status,
-        coverEmoji: form.coverEmoji,
+        coverEmoji: autoFlag,
         notes: form.notes,
         ownerId: user.uid,
         collaborators: [],
@@ -59,6 +127,8 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
       } as unknown as Trip & { members: string[] });
       setForm(EMPTY_FORM);
       setShowForm(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'שגיאה בשמירה');
     } finally {
       setSaving(false);
     }
@@ -88,49 +158,83 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
       {/* Create form */}
       {showForm && (
         <div className="bg-white rounded-2xl border border-blue-200 shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-slate-700">טיול חדש</span>
-          </div>
-
-          {/* Emoji picker */}
-          <div className="flex gap-2 flex-wrap">
-            {EMOJIS.map(e => (
-              <button key={e} type="button" onClick={() => f('coverEmoji', e)}
-                className={`text-xl w-10 h-10 rounded-xl border transition-all ${form.coverEmoji === e ? 'border-blue-500 bg-blue-50 scale-110' : 'border-slate-200 hover:border-slate-400'}`}>
-                {e}
-              </button>
-            ))}
+          {/* Preview header */}
+          <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+            <span className="text-3xl">{autoFlag}</span>
+            <div>
+              <p className="font-black text-slate-800 text-base leading-tight">
+                {autoTripName || <span className="text-slate-300">שם הטיול יופיע כאן</span>}
+              </p>
+              <p className="text-xs text-slate-400">תצוגה מקדימה</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input className="input col-span-full" placeholder="שם הטיול (למשל: איטליה 2026)" value={form.name} onChange={e => f('name', e.target.value)} />
-            <input className="input" placeholder="מדינות (מופרד בפסיק)" value={form.countries} onChange={e => f('countries', e.target.value)} />
+            {/* Country — primary field */}
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label className="text-xs text-slate-500 font-medium">מדינה / מדינות <span className="text-slate-300">(חובה)</span></label>
+              <input
+                className="input"
+                placeholder="למשל: איטליה  או  צרפת, ספרד"
+                value={form.countries}
+                onChange={e => f('countries', e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            {/* Optional name override */}
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label className="text-xs text-slate-500 font-medium">
+                שם טיול מותאם <span className="text-slate-400">(אופציונלי — ברירת מחדל: {autoName(form.countries, form.startDate) || 'מדינה + שנה'})</span>
+              </label>
+              <input
+                className="input"
+                placeholder={autoName(form.countries, form.startDate) || 'למשל: חופשת קיץ 2026'}
+                value={form.nameOverride}
+                onChange={e => f('nameOverride', e.target.value)}
+              />
+            </div>
+
             <input className="input" placeholder="ערים (מופרד בפסיק)" value={form.cities} onChange={e => f('cities', e.target.value)} />
+            <input type="number" className="input" placeholder="מספר נוסעים" value={form.travelers} onChange={e => f('travelers', e.target.value)} min="1" />
+
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-500 font-medium">תאריך יציאה</label>
+              <label className="text-xs text-slate-500 font-medium">
+                תאריך יציאה {form.startDate && <span className="text-blue-500 font-bold">{fmtDate(form.startDate)}</span>}
+              </label>
               <input type="date" className="input" value={form.startDate} onChange={e => f('startDate', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-500 font-medium">תאריך חזרה</label>
+              <label className="text-xs text-slate-500 font-medium">
+                תאריך חזרה {form.endDate && <span className="text-blue-500 font-bold">{fmtDate(form.endDate)}</span>}
+              </label>
               <input type="date" className="input" value={form.endDate} onChange={e => f('endDate', e.target.value)} />
             </div>
-            <input type="number" className="input" placeholder="מספר נוסעים" value={form.travelers} onChange={e => f('travelers', e.target.value)} min="1" />
+
             <input className="input" placeholder="שמות נוסעים (מופרד בפסיק)" value={form.travelerNames} onChange={e => f('travelerNames', e.target.value)} />
-            <select className="input col-span-full" value={form.status} onChange={e => f('status', e.target.value as TripStatus)}>
+
+            <select className="input" value={form.status} onChange={e => f('status', e.target.value as TripStatus)}>
               <option value="planning">בתכנון</option>
               <option value="partial">הוזמן חלקית</option>
               <option value="booked">הוזמן מלא</option>
               <option value="completed">הסתיים</option>
             </select>
-            <textarea className="input col-span-full resize-none" rows={2} placeholder="הערות (אופציונלי)" value={form.notes} onChange={e => f('notes', e.target.value)} />
+
+            <textarea className="input sm:col-span-2 resize-none" rows={2} placeholder="הערות (אופציונלי)" value={form.notes} onChange={e => f('notes', e.target.value)} />
           </div>
 
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              {error}
+            </div>
+          )}
+
           <div className="flex gap-2">
-            <button type="button" onClick={handleCreate} disabled={!form.name.trim() || saving}
+            <button type="button" onClick={handleCreate} disabled={(!form.countries.trim() && !form.nameOverride.trim()) || saving}
               className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all">
               {saving ? 'שומר...' : 'צור טיול'}
             </button>
-            <button type="button" onClick={() => setShowForm(false)}
+            <button type="button" onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setError(null); }}
               className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-sm transition-all">
               ביטול
             </button>
@@ -172,7 +276,7 @@ const TripsList: React.FC<Props> = ({ user, onSelectTrip }) => {
                     {trip.startDate && (
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
-                        {trip.startDate.split('-').reverse().join('/')}
+                        {fmtDate(trip.startDate)}
                         {n && ` · ${n} לילות`}
                       </span>
                     )}
