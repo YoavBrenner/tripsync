@@ -1,6 +1,6 @@
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy,
+  onSnapshot, query, where,
 } from 'firebase/firestore';
 import type { Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -12,11 +12,13 @@ export function subscribeTrips(uid: string, cb: (trips: Trip[]) => void): Unsubs
   const q = query(
     collection(db, 'trips'),
     where('members', 'array-contains', uid),
-    orderBy('createdAt', 'desc'),
   );
   return onSnapshot(q, snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as Trip)));
-  }, () => cb([]));
+    const trips = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as Trip))
+      .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    cb(trips);
+  }, (err) => { console.error('subscribeTrips error:', err); cb([]); });
 }
 
 export async function createTrip(trip: Omit<Trip, 'id'>): Promise<string> {
