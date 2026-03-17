@@ -1,14 +1,12 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { ImageIcon, X } from 'lucide-react';
 
 interface Props {
-  value: string;          // base64 or ''
+  value: string;
   onChange: (b64: string) => void;
   label?: string;
 }
 
-// Compress an image file/blob to a JPEG at max 900px wide, quality 0.65
-// Result is a base64 data-URL (~60-150 KB for typical screenshots)
 function compressImage(source: File | Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(source);
@@ -37,31 +35,30 @@ const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מס
     try {
       const b64 = await compressImage(file);
       onChange(b64);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, [onChange]);
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = Array.from(e.clipboardData.items);
-    const img = items.find(i => i.type.startsWith('image/'));
-    if (img) {
-      e.preventDefault();
-      const blob = img.getAsFile();
-      if (blob) handleFile(blob);
-    }
-  }, [handleFile]);
+  // Global paste listener — fires whenever the user presses Ctrl+V anywhere on the page
+  useEffect(() => {
+    if (value) return; // already have an image, don't listen
+    const handler = (e: ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imgItem = items.find(i => i.type.startsWith('image/'));
+      if (imgItem) {
+        e.preventDefault();
+        const blob = imgItem.getAsFile();
+        if (blob) handleFile(blob);
+      }
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, [value, handleFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file?.type.startsWith('image/')) handleFile(file);
   }, [handleFile]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  };
 
   if (value) {
     return (
@@ -83,7 +80,6 @@ const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מס
 
   return (
     <div
-      onPaste={handlePaste}
       onDrop={handleDrop}
       onDragOver={e => e.preventDefault()}
       onClick={() => fileRef.current?.click()}
@@ -92,16 +88,12 @@ const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מס
       <ImageIcon className="w-7 h-7" />
       <p className="text-sm font-semibold">{label}</p>
       <p className="text-xs text-center leading-relaxed">
-        הדבק תמונה עם <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-500 font-mono text-[11px]">Ctrl+V</kbd>
-        {' '}או לחץ לבחירת קובץ
+        הדבק מסך עם{' '}
+        <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-500 font-mono text-[11px]">Ctrl+V</kbd>
+        {' '}בכל מקום בדף, או לחץ לבחירת קובץ
       </p>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleInputChange}
-      />
+      <input ref={fileRef} type="file" accept="image/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
     </div>
   );
 };
