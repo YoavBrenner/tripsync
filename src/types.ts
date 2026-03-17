@@ -36,7 +36,8 @@ export interface TripFlight {
   currency: string;
   luggageKg: number;
   notes: string;
-  screenshot?: string; // base64 compressed image
+  screenshot?: string;   // base64 compressed image (shared per traveler)
+  travelerName?: string; // groups flights by traveler
 }
 
 export type AccommodationType = 'hotel' | 'airbnb' | 'hostel' | 'other';
