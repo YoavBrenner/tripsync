@@ -3,6 +3,7 @@ import type { TripFlight, FlightDirection } from '../types';
 import { subscribeFlights, addFlight, deleteFlight } from '../services/tripService';
 import { Plus, Plane, Trash2, ExternalLink, Mail, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { parseFlightEmail } from '../utils/emailParser';
+import ImagePasteArea from './ImagePasteArea';
 
 interface Props { tripId: string }
 
@@ -28,7 +29,7 @@ const EMPTY_FORM = {
   arrivalDate: '', arrivalTime: '',
   bookingRef: '', bookingUrl: '',
   price: '', currency: 'USD',
-  luggageKg: '', notes: '',
+  luggageKg: '', notes: '', screenshot: '',
 };
 
 function fmtDate(d: string) { return d ? d.split('-').reverse().join('/') : '—'; }
@@ -92,6 +93,7 @@ const TripFlights: React.FC<Props> = ({ tripId }) => {
         currency:         form.currency,
         luggageKg:        parseFloat(form.luggageKg) || 0,
         notes:            form.notes.trim(),
+        ...(form.screenshot ? { screenshot: form.screenshot } : {}),
       });
       setForm(EMPTY_FORM);
       setShowForm(false);
@@ -223,6 +225,12 @@ const TripFlights: React.FC<Props> = ({ tripId }) => {
             <textarea className={`${inp} col-span-2 resize-none`} rows={2} placeholder="הערות (אופציונלי)" value={form.notes} onChange={e => f('notes', e.target.value)} />
           </div>
 
+          <ImagePasteArea
+            value={form.screenshot}
+            onChange={v => f('screenshot', v)}
+            label="צלם מסך כרטיס טיסה — הדבק כאן"
+          />
+
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={handleAdd} disabled={(!form.airline.trim() && !form.flightNumber.trim()) || saving}
               className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all shadow-sm shadow-blue-200">
@@ -327,6 +335,12 @@ const TripFlights: React.FC<Props> = ({ tripId }) => {
                   </div>
 
                   {flight.notes && <p className="text-xs text-slate-400 italic">{flight.notes}</p>}
+
+                  {flight.screenshot && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-slate-100">
+                      <img src={flight.screenshot} alt="כרטיס טיסה" className="w-full object-contain max-h-64 bg-slate-50" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

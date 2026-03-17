@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { TripAccommodation, AccommodationType } from '../types';
 import { subscribeHotels, addHotel, deleteHotel } from '../services/tripService';
 import { Plus, Building2, Trash2, ExternalLink, Mail, Sparkles, BellRing, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
+import ImagePasteArea from './ImagePasteArea';
 import { parseHotelEmail } from '../utils/emailParser';
 
 interface Props { tripId: string }
@@ -33,7 +34,7 @@ const EMPTY_FORM = {
   name: '', type: 'hotel' as AccommodationType,
   address: '', checkIn: '', checkOut: '',
   bookingUrl: '', confirmationNumber: '',
-  price: '', currency: 'USD', paid: false, notes: '',
+  price: '', currency: 'USD', paid: false, notes: '', screenshot: '',
 };
 
 function nightsCount(a: string, b: string) {
@@ -98,6 +99,7 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
         bookingUrl: form.bookingUrl.trim(), confirmationNumber: form.confirmationNumber.trim(),
         price: parseFloat(form.price) || 0, currency: form.currency,
         paid: form.paid, notes: form.notes.trim(),
+        ...(form.screenshot ? { screenshot: form.screenshot } : {}),
       });
       setForm(EMPTY_FORM); setShowForm(false); setEmailText(''); setParseMsg('');
     } finally { setSaving(false); }
@@ -245,6 +247,12 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
             <textarea className={`${inp} col-span-2 resize-none`} rows={2} placeholder="הערות" value={form.notes} onChange={e => f('notes', e.target.value)} />
           </div>
 
+          <ImagePasteArea
+            value={form.screenshot}
+            onChange={v => f('screenshot', v)}
+            label="צלם מסך אישור מלון — הדבק כאן"
+          />
+
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={handleAdd} disabled={!form.name.trim() || saving}
               className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all shadow-sm shadow-blue-200">
@@ -360,6 +368,12 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
                   </div>
 
                   {hotel.notes && <p className="text-xs text-slate-400 italic">{hotel.notes}</p>}
+
+                  {hotel.screenshot && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-slate-100">
+                      <img src={hotel.screenshot} alt="אישור מלון" className="w-full object-contain max-h-64 bg-slate-50" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

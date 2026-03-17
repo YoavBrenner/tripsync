@@ -36,6 +36,7 @@ export interface TripFlight {
   currency: string;
   luggageKg: number;
   notes: string;
+  screenshot?: string; // base64 compressed image
 }
 
 export type AccommodationType = 'hotel' | 'airbnb' | 'hostel' | 'other';
@@ -53,6 +54,7 @@ export interface TripAccommodation {
   currency: string;
   paid: boolean;
   notes: string;
+  screenshot?: string; // base64 compressed image
 }
 
 export type PaymentStatus = 'paid' | 'pending' | 'partial';
