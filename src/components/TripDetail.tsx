@@ -7,6 +7,7 @@ import TripFlights from './TripFlights';
 import TripHotels from './TripHotels';
 import TripBudget from './TripBudget';
 import TripLinks from './TripLinks';
+import TripTimeline from './TripTimeline';
 
 interface Props {
   trip: Trip;
@@ -15,13 +16,14 @@ interface Props {
   onTripUpdated: (t: Trip) => void;
 }
 
-type Tab = 'overview' | 'flights' | 'hotels' | 'budget' | 'links';
+type Tab = 'timeline' | 'overview' | 'flights' | 'hotels' | 'budget' | 'links';
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: 'timeline', label: '🗺 מסלול' },
   { key: 'overview', label: 'סקירה' },
-  { key: 'flights',  label: 'טיסות' },
-  { key: 'hotels',   label: 'לינה' },
-  { key: 'budget',   label: 'תקציב' },
+  { key: 'flights',  label: '✈ טיסות' },
+  { key: 'hotels',   label: '🏨 לינה' },
+  { key: 'budget',   label: '💰 הוצאות' },
   { key: 'links',    label: 'קישורים' },
 ];
 
@@ -33,7 +35,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 const TripDetail: React.FC<Props> = ({ trip, user: _user, onBack, onTripUpdated }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [activeTab, setActiveTab] = useState<Tab>('timeline');
   const status = STATUS_LABEL[trip.status] ?? STATUS_LABEL.planning;
 
   return (
@@ -83,21 +85,12 @@ const TripDetail: React.FC<Props> = ({ trip, user: _user, onBack, onTripUpdated 
 
       {/* Tab content */}
       <div>
-        {activeTab === 'overview' && (
-          <TripOverview trip={trip} onTripUpdated={onTripUpdated} />
-        )}
-        {activeTab === 'flights' && (
-          <TripFlights tripId={trip.id} />
-        )}
-        {activeTab === 'hotels' && (
-          <TripHotels tripId={trip.id} />
-        )}
-        {activeTab === 'budget' && (
-          <TripBudget tripId={trip.id} />
-        )}
-        {activeTab === 'links' && (
-          <TripLinks tripId={trip.id} />
-        )}
+        {activeTab === 'timeline' && <TripTimeline trip={trip} />}
+        {activeTab === 'overview' && <TripOverview trip={trip} onTripUpdated={onTripUpdated} />}
+        {activeTab === 'flights'  && <TripFlights  tripId={trip.id} />}
+        {activeTab === 'hotels'   && <TripHotels   tripId={trip.id} />}
+        {activeTab === 'budget'   && <TripBudget   tripId={trip.id} />}
+        {activeTab === 'links'    && <TripLinks    tripId={trip.id} />}
       </div>
     </div>
   );
