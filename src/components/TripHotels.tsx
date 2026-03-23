@@ -1,40 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import type { TripAccommodation, AccommodationType } from '../types';
 import { subscribeHotels, addHotel, deleteHotel } from '../services/tripService';
-import { Plus, Building2, Trash2, ExternalLink, Mail, Sparkles, BellRing, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
+import {
+  Plus, Building2, Trash2, ExternalLink, Sparkles,
+  BellRing, ChevronDown, ChevronUp, MapPin, Loader2,
+  Mail, Image, Link2, Check,
+} from 'lucide-react';
 import ImagePasteArea from './ImagePasteArea';
-import { parseHotelEmail } from '../utils/emailParser';
+import type { ParsedHotel } from '../../api/parse-hotel';
 
 interface Props { tripId: string }
 
 const TYPE_OPTIONS: { value: AccommodationType; label: string; icon: string }[] = [
-  { value: 'hotel',   label: 'מלון',    icon: '🏨' },
-  { value: 'airbnb',  label: 'Airbnb',  icon: '🏠' },
-  { value: 'hostel',  label: 'הוסטל',   icon: '🛏' },
-  { value: 'other',   label: 'אחר',     icon: '📍' },
+  { value: 'hotel',   label: 'מלון',   icon: '🏨' },
+  { value: 'airbnb',  label: 'Airbnb', icon: '🏠' },
+  { value: 'hostel',  label: 'הוסטל',  icon: '🛏' },
+  { value: 'other',   label: 'אחר',    icon: '📍' },
 ];
-
-const TYPE_COLOR: Record<AccommodationType, string> = {
-  hotel:  'bg-blue-50 border-blue-200 text-blue-700',
-  airbnb: 'bg-rose-50 border-rose-200 text-rose-700',
-  hostel: 'bg-amber-50 border-amber-200 text-amber-700',
-  other:  'bg-slate-50 border-slate-200 text-slate-600',
-};
 
 const TYPE_BADGE: Record<AccommodationType, string> = {
   hotel:  'bg-blue-100 text-blue-700',
   airbnb: 'bg-rose-100 text-rose-700',
   hostel: 'bg-amber-100 text-amber-700',
   other:  'bg-slate-100 text-slate-600',
-};
-
-const CURRENCIES = ['ILS', 'USD', 'EUR', 'GBP'];
-
-const EMPTY_FORM = {
-  name: '', type: 'hotel' as AccommodationType,
-  address: '', checkIn: '', checkOut: '',
-  bookingUrl: '', confirmationNumber: '',
-  price: '', currency: 'USD', paid: false, notes: '', screenshot: '',
 };
 
 function nightsCount(a: string, b: string) {
@@ -44,66 +32,232 @@ function nightsCount(a: string, b: string) {
 }
 
 function fmtDate(d: string) { return d ? d.split('-').reverse().join('/') : '—'; }
-
-function isToday(d: string) {
-  return d === new Date().toISOString().split('T')[0];
-}
+function isToday(d: string)    { return d === new Date().toISOString().split('T')[0]; }
 function isTomorrow(d: string) {
-  const tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
-  return d === tmr.toISOString().split('T')[0];
+  const t = new Date(); t.setDate(t.getDate() + 1);
+  return d === t.toISOString().split('T')[0];
 }
 
 const inp = 'bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 w-full transition-all';
 
-const TripHotels: React.FC<Props> = ({ tripId }) => {
-  const [hotels, setHotels]             = useState<TripAccommodation[]>([]);
-  const [showForm, setShowForm]         = useState(false);
-  const [form, setForm]                 = useState(EMPTY_FORM);
-  const [saving, setSaving]             = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const [emailText, setEmailText]       = useState('');
-  const [showEmailPaste, setShowEmailPaste] = useState(false);
-  const [parseMsg, setParseMsg]         = useState('');
-  const [expandedId, setExpandedId]     = useState<string | null>(null);
+// ── Hotel Scanner ────────────────────────────────────────────────────────────
 
-  useEffect(() => { return subscribeHotels(tripId, setHotels); }, [tripId]);
+type InputMethod = 'none' | 'image' | 'text' | 'url';
 
-  const f = (k: keyof typeof form, v: string | boolean) =>
-    setForm(prev => ({ ...prev, [k]: v }));
+interface ScannerProps { tripId: string; onSaved: () => void }
 
-  const handleParseEmail = () => {
-    if (!emailText.trim()) return;
-    const parsed = parseHotelEmail(emailText);
-    setForm(prev => ({
-      ...prev,
-      name:               parsed.name               ?? prev.name,
-      checkIn:            parsed.checkIn             ?? prev.checkIn,
-      checkOut:           parsed.checkOut            ?? prev.checkOut,
-      confirmationNumber: parsed.confirmationNumber  ?? prev.confirmationNumber,
-      address:            parsed.address             ?? prev.address,
-      price:              parsed.price != null ? String(parsed.price) : prev.price,
-      currency:           parsed.currency            ?? prev.currency,
-    }));
-    const filled = Object.values(parsed).filter(v => v != null).length;
-    setParseMsg(filled > 0 ? `זוהו ${filled} שדות אוטומטית ✓` : 'לא זוהו פרטים — בדוק את הטקסט');
-    setShowEmailPaste(false);
+const HotelScanner: React.FC<ScannerProps> = ({ tripId, onSaved }) => {
+  const [method, setMethod]       = useState<InputMethod>('none');
+  const [emailText, setEmailText] = useState('');
+  const [bookingUrl, setBookingUrl] = useState('');
+  const [parsing, setParsing]     = useState(false);
+  const [error, setError]         = useState('');
+  const [result, setResult]       = useState<ParsedHotel | null>(null);
+  const [screenshot, setScreenshot] = useState('');
+  const [saving, setSaving]       = useState(false);
+  // Editable after parse
+  const [name, setName]           = useState('');
+  const [type, setType]           = useState<AccommodationType>('hotel');
+  const [price, setPrice]         = useState('');
+  const [currency, setCurrency]   = useState('USD');
+
+  const applyResult = (p: ParsedHotel) => {
+    setResult(p);
+    setName(p.name || '');
+    setPrice(p.price ? String(p.price) : '');
+    setCurrency(p.currency || 'USD');
   };
 
-  const handleAdd = async () => {
-    if (!form.name.trim()) return;
+  const parse = async (body: object) => {
+    setParsing(true); setError('');
+    try {
+      const res = await fetch('/api/parse-hotel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `שגיאה ${res.status}`);
+      applyResult(await res.json() as ParsedHotel);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'שגיאה לא ידועה');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!result || saving) return;
     setSaving(true);
     try {
       await addHotel(tripId, {
-        name: form.name.trim(), type: form.type,
-        address: form.address.trim(), checkIn: form.checkIn, checkOut: form.checkOut,
-        bookingUrl: form.bookingUrl.trim(), confirmationNumber: form.confirmationNumber.trim(),
-        price: parseFloat(form.price) || 0, currency: form.currency,
-        paid: form.paid, notes: form.notes.trim(),
-        ...(form.screenshot ? { screenshot: form.screenshot } : {}),
+        name: name || result.name,
+        type,
+        address: result.address || '',
+        checkIn: result.checkIn || '',
+        checkOut: result.checkOut || '',
+        bookingUrl: result.bookingUrl || bookingUrl || '',
+        confirmationNumber: result.confirmationNumber || '',
+        price: parseFloat(price) || 0,
+        currency,
+        paid: false,
+        notes: result.notes || '',
+        ...(screenshot ? { screenshot } : {}),
       });
-      setForm(EMPTY_FORM); setShowForm(false); setEmailText(''); setParseMsg('');
-    } finally { setSaving(false); }
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
   };
+
+  return (
+    <div className="bg-white rounded-2xl border border-blue-100 shadow-md p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="font-bold text-slate-700 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-indigo-500" /> זיהוי פרטי לינה
+        </span>
+        <button type="button" onClick={onSaved} className="text-slate-400 hover:text-slate-600 text-sm">ביטול</button>
+      </div>
+
+      {/* Method selector */}
+      {!result && !parsing && (
+        <div className="grid grid-cols-3 gap-2">
+          <button type="button" onClick={() => setMethod(method === 'image' ? 'none' : 'image')}
+            className={`flex flex-col items-center gap-2 py-4 rounded-2xl border-2 text-sm font-bold transition-all ${method === 'image' ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+            <Image className="w-5 h-5" /> צילום מסך / PDF
+          </button>
+          <button type="button" onClick={() => setMethod(method === 'text' ? 'none' : 'text')}
+            className={`flex flex-col items-center gap-2 py-4 rounded-2xl border-2 text-sm font-bold transition-all ${method === 'text' ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+            <Mail className="w-5 h-5" /> טקסט מייל
+          </button>
+          <button type="button" onClick={() => setMethod(method === 'url' ? 'none' : 'url')}
+            className={`flex flex-col items-center gap-2 py-4 rounded-2xl border-2 text-sm font-bold transition-all ${method === 'url' ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+            <Link2 className="w-5 h-5" /> קישור הזמנה
+          </button>
+        </div>
+      )}
+
+      {/* Image/PDF input */}
+      {method === 'image' && !result && !parsing && (
+        <ImagePasteArea
+          value={screenshot}
+          onChange={img => { setScreenshot(img); parse({ imageBase64: img }); }}
+          label="הדבק צילום מסך / PDF של אישור המלון (Ctrl+V)"
+        />
+      )}
+
+      {/* Email text input */}
+      {method === 'text' && !result && !parsing && (
+        <div className="space-y-2">
+          <textarea
+            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 resize-none font-mono"
+            rows={7}
+            placeholder={"הדבק כאן את הטקסט מהמייל\n(Booking.com, Hotels.com, Airbnb, אגודה...)"}
+            value={emailText}
+            onChange={e => setEmailText(e.target.value)}
+            dir="ltr"
+          />
+          <button type="button" onClick={() => parse({ text: emailText })} disabled={!emailText.trim()}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
+            <Sparkles className="w-4 h-4" /> זהה פרטים עם Claude
+          </button>
+        </div>
+      )}
+
+      {/* URL input */}
+      {method === 'url' && !result && !parsing && (
+        <div className="space-y-2">
+          <input
+            className={inp} dir="ltr"
+            placeholder="https://booking.com/... / https://airbnb.com/..."
+            value={bookingUrl}
+            onChange={e => setBookingUrl(e.target.value)}
+          />
+          <p className="text-xs text-slate-400 text-center">הכנס קישור + הוסף את שאר הפרטים ידנית בהמשך</p>
+          <button type="button" onClick={() => applyResult({ name: '', address: '', checkIn: '', checkOut: '', price: 0, currency: 'USD', confirmationNumber: '', bookingUrl, notes: '' })}
+            disabled={!bookingUrl.trim()}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all">
+            המשך
+          </button>
+        </div>
+      )}
+
+      {/* Parsing spinner */}
+      {parsing && (
+        <div className="flex items-center justify-center gap-3 py-8 text-indigo-600">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="font-medium text-sm">Claude קורא את אישור ההזמנה...</span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="font-bold">שגיאה:</p><p>{error}</p>
+          <button type="button" onClick={() => { setError(''); setMethod('none'); }}
+            className="mt-1 text-xs underline">נסה שוב</button>
+        </div>
+      )}
+
+      {/* Result */}
+      {result && (
+        <div className="space-y-3">
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-1.5">
+            <p className="text-xs font-bold text-green-700 flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" /> זוהו פרטי הלינה
+            </p>
+            {result.checkIn && (
+              <p className="text-xs text-slate-700">
+                📅 {fmtDate(result.checkIn)} → {fmtDate(result.checkOut)}
+                {nightsCount(result.checkIn, result.checkOut) && ` · ${nightsCount(result.checkIn, result.checkOut)} לילות`}
+              </p>
+            )}
+            {result.address && <p className="text-xs text-slate-500">📍 {result.address}</p>}
+            {result.confirmationNumber && <p className="text-xs text-slate-500">אישור: <strong>{result.confirmationNumber}</strong></p>}
+            {result.notes && <p className="text-xs text-slate-400 italic">{result.notes}</p>}
+          </div>
+
+          {/* Editable essentials */}
+          <input className={inp} placeholder="שם המקום" value={name} onChange={e => setName(e.target.value)} />
+
+          <div className="grid grid-cols-4 gap-2">
+            {TYPE_OPTIONS.map(opt => (
+              <button key={opt.value} type="button" onClick={() => setType(opt.value)}
+                className={`flex flex-col items-center gap-1 py-2 rounded-xl border text-xs font-bold transition-all ${type === opt.value ? 'border-indigo-400 bg-indigo-50 text-indigo-700 border-2' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                <span>{opt.icon}</span>{opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <input type="number" className={inp} placeholder="מחיר" value={price} onChange={e => setPrice(e.target.value)} min="0" />
+            <select className={`${inp} w-28 flex-shrink-0`} value={currency} onChange={e => setCurrency(e.target.value)}>
+              {['ILS','USD','EUR','GBP'].map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+            <button type="button" onClick={handleSave} disabled={saving || !name.trim()}
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all">
+              {saving ? 'שומר...' : `שמור — ${name || 'לינה'}`}
+            </button>
+            <button type="button" onClick={() => { setResult(null); setMethod('none'); setScreenshot(''); setEmailText(''); setBookingUrl(''); }}
+              className="px-3 py-3 bg-slate-100 text-slate-500 rounded-xl text-sm hover:bg-slate-200">✕</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+const TripHotels: React.FC<Props> = ({ tripId }) => {
+  const [hotels, setHotels]               = useState<TripAccommodation[]>([]);
+  const [showScanner, setShowScanner]     = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [expandedId, setExpandedId]       = useState<string | null>(null);
+
+  useEffect(() => subscribeHotels(tripId, setHotels), [tripId]);
 
   const sorted = [...hotels].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
 
@@ -112,19 +266,14 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
     return sum + (h.price || 0) * (rate[h.currency] ?? 1);
   }, 0);
 
-  // Check-in alerts
   const todayCheckins    = sorted.filter(h => isToday(h.checkIn));
   const tomorrowCheckins = sorted.filter(h => isTomorrow(h.checkIn));
 
   const requestNotification = (hotelName: string, checkIn: string) => {
     if (!('Notification' in window)) return;
     Notification.requestPermission().then(perm => {
-      if (perm === 'granted') {
-        new Notification(`צ'ק-אין: ${hotelName}`, {
-          body: `היום — ${fmtDate(checkIn)}`,
-          icon: '/vite.svg',
-        });
-      }
+      if (perm === 'granted')
+        new Notification(`צ'ק-אין: ${hotelName}`, { body: `היום — ${fmtDate(checkIn)}`, icon: '/vite.svg' });
     });
   };
 
@@ -156,122 +305,27 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-black text-slate-800 text-lg">לינה</h2>
-          <p className="text-slate-500 text-sm">
-            {hotels.length} הזמנות
-            {totalILS > 0 && <span className="text-slate-700 font-semibold"> · סה"כ ~{Math.round(totalILS).toLocaleString()} ₪</span>}
-          </p>
+          {totalILS > 0 && <p className="text-slate-700 text-sm font-semibold">~{Math.round(totalILS).toLocaleString()} ₪</p>}
         </div>
-        <button type="button" onClick={() => { setShowForm(v => !v); setParseMsg(''); }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm transition-all shadow-sm shadow-blue-200">
-          <Plus className="w-4 h-4" /> הוסף לינה
-        </button>
+        {!showScanner && (
+          <button type="button" onClick={() => setShowScanner(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold text-sm transition-all shadow-sm">
+            <Plus className="w-4 h-4" /> הוסף לינה
+          </button>
+        )}
       </div>
 
-      {/* Add form */}
-      {showForm && (
-        <div className="bg-white rounded-2xl border border-blue-100 shadow-md p-5 space-y-4">
-
-          {/* Email parser */}
-          <button type="button" onClick={() => setShowEmailPaste(v => !v)}
-            className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-gradient-to-l from-blue-50 to-indigo-50 border border-blue-200 rounded-xl text-sm font-bold text-blue-700 hover:from-blue-100 transition-all">
-            <span className="flex items-center gap-2"><Mail className="w-4 h-4" /> הדבק אישור הזמנה — ימולא אוטומטית</span>
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-          </button>
-
-          {showEmailPaste && (
-            <div className="space-y-2">
-              <textarea
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 resize-none font-mono"
-                rows={6}
-                placeholder="הדבק כאן את טקסט האימייל / אישור הזמנה (Booking.com, Hotels.com, Airbnb...)&#10;&#10;כולל: תאריכי צ'ק-אין/אאוט, מספר אישור, מחיר"
-                value={emailText}
-                onChange={e => setEmailText(e.target.value)}
-                dir="ltr"
-              />
-              <button type="button" onClick={handleParseEmail}
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm transition-all">
-                פרוס פרטים אוטומטית
-              </button>
-            </div>
-          )}
-
-          {parseMsg && (
-            <p className={`text-xs font-medium px-3 py-2 rounded-xl ${parseMsg.includes('✓') ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-              {parseMsg}
-            </p>
-          )}
-
-          {/* Type selector */}
-          <div className="grid grid-cols-4 gap-2">
-            {TYPE_OPTIONS.map(opt => (
-              <button key={opt.value} type="button" onClick={() => f('type', opt.value)}
-                className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-bold transition-all ${
-                  form.type === opt.value ? TYPE_COLOR[opt.value] + ' border-2' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                }`}>
-                <span className="text-lg">{opt.icon}</span>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <input className={`${inp} col-span-2`} placeholder="שם המקום" value={form.name} onChange={e => f('name', e.target.value)} autoFocus />
-            <input className={`${inp} col-span-2`} placeholder="כתובת" value={form.address} onChange={e => f('address', e.target.value)} />
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-500 font-medium">
-                צ'ק-אין {form.checkIn && <span className="text-blue-600 font-bold">{fmtDate(form.checkIn)}</span>}
-              </label>
-              <input type="date" className={inp} value={form.checkIn} onChange={e => f('checkIn', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-500 font-medium">
-                צ'ק-אאוט {form.checkOut && <span className="text-blue-600 font-bold">{fmtDate(form.checkOut)}</span>}
-              </label>
-              <input type="date" className={inp} value={form.checkOut} onChange={e => f('checkOut', e.target.value)} />
-            </div>
-
-            <input type="number" className={inp} placeholder="מחיר" value={form.price} onChange={e => f('price', e.target.value)} min="0" />
-            <select className={inp} value={form.currency} onChange={e => f('currency', e.target.value)}>
-              {CURRENCIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-
-            <input className={inp} placeholder="מספר אישור / קוד הזמנה" value={form.confirmationNumber} onChange={e => f('confirmationNumber', e.target.value)} />
-            <input className={inp} placeholder="קישור הזמנה (https://...)" value={form.bookingUrl} onChange={e => f('bookingUrl', e.target.value)} />
-
-            <label className="flex items-center gap-2 cursor-pointer col-span-2">
-              <input type="checkbox" checked={form.paid} onChange={e => f('paid', e.target.checked)} className="w-4 h-4 rounded accent-blue-600" />
-              <span className="text-sm text-slate-700 font-medium">שולם</span>
-            </label>
-
-            <textarea className={`${inp} col-span-2 resize-none`} rows={2} placeholder="הערות" value={form.notes} onChange={e => f('notes', e.target.value)} />
-          </div>
-
-          <ImagePasteArea
-            value={form.screenshot}
-            onChange={v => f('screenshot', v)}
-            label="צלם מסך אישור מלון — הדבק כאן"
-          />
-
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={handleAdd} disabled={!form.name.trim() || saving}
-              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all shadow-sm shadow-blue-200">
-              {saving ? 'שומר...' : 'הוסף לינה'}
-            </button>
-            <button type="button" onClick={() => { setShowForm(false); setParseMsg(''); setEmailText(''); }}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-sm transition-all">
-              ביטול
-            </button>
-          </div>
-        </div>
+      {/* Scanner */}
+      {showScanner && (
+        <HotelScanner tripId={tripId} onSaved={() => setShowScanner(false)} />
       )}
 
       {/* Empty */}
-      {hotels.length === 0 && !showForm && (
+      {hotels.length === 0 && !showScanner && (
         <div className="text-center py-16 text-slate-400">
           <Building2 className="w-12 h-12 mx-auto mb-3 opacity-20" />
           <p className="font-semibold">אין הזמנות לינה עדיין</p>
-          <p className="text-sm mt-1">לחצו "הוסף לינה" או הדביקו אישור הזמנה</p>
+          <p className="text-sm mt-1">לחצו "הוסף לינה" — מייל, צילום מסך, או קישור</p>
         </div>
       )}
 
@@ -294,10 +348,9 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
             }`}>
               <button type="button" className="w-full text-right p-4" onClick={() => setExpandedId(isExp ? null : hotel.id)}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 border ${TYPE_COLOR[hotel.type]}`}>
+                  <div className="text-2xl flex-shrink-0">
                     {TYPE_OPTIONS.find(t => t.value === hotel.type)?.icon}
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${TYPE_BADGE[hotel.type]}`}>
@@ -313,7 +366,6 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
                       {nights && <span className="text-slate-400"> · {nights} לילות</span>}
                     </p>
                   </div>
-
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {hotel.price > 0 && <span className="text-sm font-bold text-slate-700">{hotel.price.toLocaleString()} {hotel.currency}</span>}
                     {isExp ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -321,14 +373,13 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
                 </div>
               </button>
 
-              {/* Expanded */}
               {isExp && (
                 <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-2">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
-                    {hotel.address         && <span className="col-span-2">{hotel.address}</span>}
-                    {hotel.confirmationNumber && <span>אישור: <strong className="text-slate-700">{hotel.confirmationNumber}</strong></span>}
+                  <div className="text-xs text-slate-500 space-y-1">
+                    {hotel.address && <p>📍 {hotel.address}</p>}
+                    {hotel.confirmationNumber && <p>אישור: <strong className="text-slate-700">{hotel.confirmationNumber}</strong></p>}
+                    {hotel.notes && <p className="italic text-slate-400">{hotel.notes}</p>}
                   </div>
-
                   <div className="flex flex-wrap items-center gap-3">
                     {mapsUrl && (
                       <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
@@ -344,11 +395,10 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
                     )}
                     {todayCI && (
                       <button type="button" onClick={() => requestNotification(hotel.name, hotel.checkIn)}
-                        className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium">
+                        className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
                         <BellRing className="w-3 h-3" /> שלח התראה
                       </button>
                     )}
-
                     <div className="mr-auto">
                       {pendingDelete === hotel.id ? (
                         <span className="flex items-center gap-1">
@@ -366,12 +416,9 @@ const TripHotels: React.FC<Props> = ({ tripId }) => {
                       )}
                     </div>
                   </div>
-
-                  {hotel.notes && <p className="text-xs text-slate-400 italic">{hotel.notes}</p>}
-
                   {hotel.screenshot && (
                     <div className="mt-2 rounded-xl overflow-hidden border border-slate-100">
-                      <img src={hotel.screenshot} alt="אישור מלון" className="w-full object-contain max-h-64 bg-slate-50" />
+                      <img src={hotel.screenshot} alt="אישור" className="w-full object-contain max-h-64 bg-slate-50" />
                     </div>
                   )}
                 </div>

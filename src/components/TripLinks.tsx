@@ -1,10 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import type { TripLink, LinkCategory } from '../types';
+import type { Trip, TripLink, LinkCategory } from '../types';
 import { subscribeLinks, addLink, deleteLink } from '../services/tripService';
-import { Plus, Link2, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, Link2, Trash2, ExternalLink, Sparkles } from 'lucide-react';
 
 interface Props {
   tripId: string;
+  trip: Trip;
+}
+
+interface Suggestion {
+  title: string;
+  url: string;
+  category: LinkCategory;
+  emoji: string;
+}
+
+function buildSuggestions(trip: Trip): Suggestion[] {
+  const suggestions: Suggestion[] = [];
+  for (const country of trip.countries) {
+    suggestions.push({
+      emoji: '📖',
+      title: `ויקיפדיה — ${country}`,
+      url: `https://he.wikipedia.org/wiki/${encodeURIComponent(country)}`,
+      category: 'other',
+    });
+    suggestions.push({
+      emoji: '🎒',
+      title: `למטייל — ${country}`,
+      url: `https://www.lametayel.co.il/?s=${encodeURIComponent(country)}`,
+      category: 'other',
+    });
+    suggestions.push({
+      emoji: '🗺',
+      title: `מפה — ${country}`,
+      url: `https://www.google.com/maps/search/${encodeURIComponent(country)}`,
+      category: 'map',
+    });
+  }
+  return suggestions;
 }
 
 const CATEGORY_OPTIONS: { value: LinkCategory; label: string }[] = [
@@ -32,12 +65,13 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-const TripLinks: React.FC<Props> = ({ tripId }) => {
+const TripLinks: React.FC<Props> = ({ tripId, trip }) => {
   const [links, setLinks] = useState<TripLink[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
 
   useEffect(() => {
     return subscribeLinks(tripId, setLinks);
@@ -67,11 +101,24 @@ const TripLinks: React.FC<Props> = ({ tripId }) => {
     setPendingDelete(null);
   };
 
+  const handleAddSuggestion = async (s: Suggestion) => {
+    setAddingSuggestion(s.url);
+    try {
+      await addLink(tripId, { title: s.title, url: s.url, category: s.category, notes: '' });
+    } finally {
+      setAddingSuggestion(null);
+    }
+  };
+
   // Group by category — only show groups that have entries
   const grouped = CATEGORY_OPTIONS.map(cat => ({
     ...cat,
     items: links.filter(l => l.category === cat.value),
   })).filter(g => g.items.length > 0);
+
+  // Suggestions not yet added
+  const savedUrls = new Set(links.map(l => l.url));
+  const suggestions = buildSuggestions(trip).filter(s => !savedUrls.has(s.url));
 
   return (
     <div className="space-y-4">
@@ -146,6 +193,30 @@ const TripLinks: React.FC<Props> = ({ tripId }) => {
         </div>
       )}
 
+      {/* Suggestions */}
+      {suggestions.length > 0 && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-bold text-indigo-600 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" /> קישורים מוצעים
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map(s => (
+              <button
+                key={s.url}
+                type="button"
+                disabled={addingSuggestion === s.url}
+                onClick={() => handleAddSuggestion(s)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl text-xs font-medium text-slate-700 transition-all disabled:opacity-40"
+              >
+                <span>{s.emoji}</span>
+                <span>{s.title}</span>
+                <Plus className="w-3 h-3 text-indigo-400" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Empty state */}
       {links.length === 0 && !showForm && (
         <div className="text-center py-16 text-slate-400">
@@ -155,15 +226,38 @@ const TripLinks: React.FC<Props> = ({ tripId }) => {
         </div>
       )}
 
-      {/* Grouped links */}
+      {/* Fixed links (Wikipedia + למטייל) */}
+      {savedUrls.size > 0 && links.some(l => buildSuggestions(trip).map(s=>s.url).includes(l.url)) && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-slate-400 px-1">קבועים</p>
+          {links.filter(l => buildSuggestions(trip).map(s=>s.url).includes(l.url)).map(link => (
+            <div key={link.id} className="bg-slate-50 rounded-2xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+              <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm font-medium text-slate-700 hover:text-blue-600 flex items-center gap-2">
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                {link.title}
+              </a>
+              {pendingDelete === link.id ? (
+                <span className="flex items-center gap-1">
+                  <button type="button" onClick={() => handleDelete(link.id)} className="px-2 py-0.5 text-[11px] font-bold bg-red-500 text-white rounded-lg">מחק</button>
+                  <button type="button" onClick={() => setPendingDelete(null)} className="px-2 py-0.5 text-[11px] font-bold bg-slate-200 text-slate-600 rounded-lg">לא</button>
+                </span>
+              ) : (
+                <button type="button" onClick={() => setPendingDelete(link.id)} className="p-1 text-slate-300 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* User-added links */}
       <div className="space-y-5">
-        {grouped.map(group => (
+        {grouped.filter(g => g.items.some(l => !buildSuggestions(trip).map(s=>s.url).includes(l.url))).map(group => (
           <div key={group.value}>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">
               {group.label}
             </h3>
             <div className="space-y-2">
-              {group.items.map(link => (
+              {group.items.filter(l => !buildSuggestions(trip).map(s=>s.url).includes(l.url)).map(link => (
                 <div key={link.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-3 min-w-0 flex-1">

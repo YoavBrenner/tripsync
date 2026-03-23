@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect } from 'react';
-import { ImageIcon, X } from 'lucide-react';
+import { ImageIcon, FileText, X } from 'lucide-react';
 
 interface Props {
   value: string;
@@ -28,13 +28,28 @@ function compressImage(source: File | Blob): Promise<string> {
   });
 }
 
+function readPdf(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מסך / תמונת כרטיס' }) => {
   const fileRef = useRef<HTMLInputElement>(null);
+  const isPdf = value.startsWith('data:application/pdf');
 
   const handleFile = useCallback(async (file: File | Blob) => {
     try {
-      const b64 = await compressImage(file);
-      onChange(b64);
+      if ((file as File).type === 'application/pdf') {
+        const b64 = await readPdf(file as File);
+        onChange(b64);
+      } else {
+        const b64 = await compressImage(file);
+        onChange(b64);
+      }
     } catch { /* ignore */ }
   }, [onChange]);
 
@@ -57,13 +72,23 @@ const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מס
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith('image/')) handleFile(file);
+    if (file?.type.startsWith('image/') || file?.type === 'application/pdf') handleFile(file);
   }, [handleFile]);
 
   if (value) {
     return (
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-        <img src={value} alt="screenshot" className="w-full object-contain max-h-64 bg-slate-50" />
+        {isPdf ? (
+          <div className="flex items-center gap-3 p-4 bg-slate-50 min-h-[80px]">
+            <FileText className="w-10 h-10 text-red-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-slate-700">קובץ PDF</p>
+              <p className="text-xs text-slate-400">יסרק אוטומטית בעת השמירה</p>
+            </div>
+          </div>
+        ) : (
+          <img src={value} alt="screenshot" className="w-full object-contain max-h-64 bg-slate-50" />
+        )}
         <button
           type="button"
           onClick={() => onChange('')}
@@ -72,7 +97,7 @@ const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מס
           <X className="w-4 h-4 text-white" />
         </button>
         <div className="absolute bottom-2 right-2 bg-black/40 text-white text-[10px] px-2 py-0.5 rounded-full">
-          צילום מסך שמור
+          {isPdf ? 'PDF שמור' : 'צילום מסך שמור'}
         </div>
       </div>
     );
@@ -90,9 +115,9 @@ const ImagePasteArea: React.FC<Props> = ({ value, onChange, label = 'צלם מס
       <p className="text-xs text-center leading-relaxed">
         הדבק מסך עם{' '}
         <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-500 font-mono text-[11px]">Ctrl+V</kbd>
-        {' '}בכל מקום בדף, או לחץ לבחירת קובץ
+        {' '}בכל מקום בדף, או לחץ לבחירת קובץ / PDF
       </p>
-      <input ref={fileRef} type="file" accept="image/*" className="hidden"
+      <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
     </div>
   );

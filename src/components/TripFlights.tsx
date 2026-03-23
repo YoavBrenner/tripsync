@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { TripFlight, FlightDirection } from '../types';
 import { subscribeFlights, addFlight, deleteFlight } from '../services/tripService';
-import { Plus, Plane, Trash2, ExternalLink, Sparkles, User, Loader2, Check } from 'lucide-react';
+import { Plus, Plane, Trash2, ExternalLink, Sparkles, User, Loader2, Check, FileText } from 'lucide-react';
 import ImagePasteArea from './ImagePasteArea';
 import type { ParsedTicket } from '../../api/parse-ticket';
 
@@ -59,11 +59,10 @@ interface ScanResult {
 
 interface TicketScannerProps {
   onSaved: () => void;
-  onCancel: () => void;
   tripId: string;
 }
 
-const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId }) => {
+const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, tripId }) => {
   const [screenshot, setScreenshot]   = useState('');
   const [scanning, setScanning]       = useState(false);
   const [result, setResult]           = useState<ScanResult | null>(null);
@@ -92,6 +91,8 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
       const ticket = await res.json() as ParsedTicket;
       setResult({ ticket, screenshot: img });
       setTravelerName(ticket.passengerName ?? '');
+      setPrice(ticket.price && ticket.price > 0 ? String(ticket.price) : '');
+      setCurrency(ticket.currency || 'USD');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה לא ידועה');
     } finally {
@@ -100,7 +101,7 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
   };
 
   const handleSave = async () => {
-    if (!result) return;
+    if (!result || saving) return;
     setSaving(true);
     try {
       const { ticket } = result;
@@ -124,7 +125,7 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
           currency,
           luggageKg: f.baggagePieces * 23,
           notes: f.seat ? `מושב: ${f.seat}` : '',
-          screenshot: i === 0 ? result.screenshot : undefined,
+          ...(i === 0 && result.screenshot ? { screenshot: result.screenshot } : {}),
         } as Omit<TripFlight, 'id'>);
       }
       onSaved();
@@ -139,10 +140,10 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
         <span className="font-bold text-slate-700 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-indigo-500" /> סריקת כרטיס טיסה
         </span>
-        <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-600 text-sm">ביטול</button>
+        <button type="button" onClick={onSaved} className="text-slate-400 hover:text-slate-600 text-sm">ביטול</button>
       </div>
 
-      {!screenshot && (
+      {!screenshot && !scanning && (
         <ImagePasteArea
           value=""
           onChange={handleScan}
@@ -164,16 +165,13 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
           {error.includes('ANTHROPIC_API_KEY') && (
             <p className="mt-1 text-xs">הוסף <code className="bg-red-100 px-1 rounded">ANTHROPIC_API_KEY</code> ב-Vercel → Settings → Environment Variables</p>
           )}
+          <button type="button" onClick={() => { setError(''); setScreenshot(''); }}
+            className="mt-2 text-xs underline text-red-500">נסה שוב</button>
         </div>
       )}
 
       {result && (
         <div className="space-y-3">
-          {/* Screenshot preview */}
-          <div className="rounded-xl overflow-hidden border border-slate-200">
-            <img src={screenshot} alt="כרטיס" className="w-full object-contain max-h-48 bg-slate-50" />
-          </div>
-
           {/* Extracted flights */}
           <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
             <p className="text-xs font-bold text-green-700 flex items-center gap-1">
@@ -203,7 +201,7 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
               <input className={inp} value={travelerName} onChange={e => setTravelerName(e.target.value)} placeholder="שם מלא" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-500 font-medium">מחיר כולל (אופציונלי)</label>
+              <label className="text-xs text-slate-500 font-medium">מחיר כולל</label>
               <input type="number" className={inp} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" min="0" />
             </div>
             <select className={inp} value={currency} onChange={e => setCurrency(e.target.value)}>
@@ -211,10 +209,16 @@ const TicketScanner: React.FC<TicketScannerProps> = ({ onSaved, onCancel, tripId
             </select>
           </div>
 
-          <button type="button" onClick={handleSave} disabled={saving}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all shadow-sm shadow-blue-200">
-            {saving ? 'שומר...' : `הוסף ${result.ticket.flights.length} טיסות עבור ${travelerName || result.ticket.passengerName}`}
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleSave} disabled={saving}
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-bold text-sm transition-all shadow-sm shadow-blue-200">
+              {saving ? 'שומר...' : `שמור עבור ${travelerName || result.ticket.passengerName}`}
+            </button>
+            <button type="button" onClick={() => { setScreenshot(''); setResult(null); setError(''); }}
+              className="px-3 py-3 bg-slate-100 text-slate-500 rounded-xl text-sm font-medium hover:bg-slate-200">
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -277,20 +281,21 @@ const TripFlights: React.FC<Props> = ({ tripId }) => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-black text-slate-800 text-lg">טיסות</h2>
-          <p className="text-slate-500 text-sm">
-            {flights.length} טיסות
-            {totalILS > 0 && <span className="text-slate-700 font-semibold"> · ~{Math.round(totalILS).toLocaleString()} ₪</span>}
-          </p>
+          {totalILS > 0 && <p className="text-slate-700 text-sm font-semibold">~{Math.round(totalILS).toLocaleString()} ₪</p>}
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => setMode(mode === 'scan' ? 'none' : 'scan')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold text-sm transition-all shadow-sm">
-            <Sparkles className="w-4 h-4" /> סרוק כרטיס
-          </button>
-          <button type="button" onClick={() => setMode(mode === 'manual' ? 'none' : 'manual')}
-            className="flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm transition-all">
-            <Plus className="w-4 h-4" />
-          </button>
+          {mode !== 'scan' && (
+            <button type="button" onClick={() => setMode('scan')}
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold text-sm transition-all shadow-sm">
+              <Sparkles className="w-4 h-4" /> סרוק כרטיס
+            </button>
+          )}
+          {mode !== 'scan' && (
+            <button type="button" onClick={() => setMode(mode === 'manual' ? 'none' : 'manual')}
+              className="flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm transition-all">
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -299,7 +304,6 @@ const TripFlights: React.FC<Props> = ({ tripId }) => {
         <TicketScanner
           tripId={tripId}
           onSaved={() => setMode('none')}
-          onCancel={() => setMode('none')}
         />
       )}
 
@@ -380,7 +384,29 @@ const TripFlights: React.FC<Props> = ({ tripId }) => {
                   <User className="w-3.5 h-3.5 text-blue-600" />
                 </div>
                 <span className="font-bold text-slate-700 text-sm">{traveler || 'טיסות כלליות'}</span>
-                <span className="text-xs text-slate-400 mr-auto">{travelerFlights.length} טיסות</span>
+                <div className="mr-auto flex items-center gap-2">
+                  {screenshot && (
+                    <a
+                      href={screenshot}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={`${traveler || 'ticket'}.${screenshot.startsWith('data:application/pdf') ? 'pdf' : 'jpg'}`}
+                      className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 font-medium"
+                      onClick={e => {
+                        if (screenshot.startsWith('data:application/pdf')) {
+                          e.preventDefault();
+                          const byteStr = atob(screenshot.split(',')[1]);
+                          const arr = new Uint8Array(byteStr.length);
+                          for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+                          const blob = new Blob([arr], { type: 'application/pdf' });
+                          window.open(URL.createObjectURL(blob), '_blank');
+                        }
+                      }}
+                    >
+                      <FileText className="w-3.5 h-3.5" /> כרטיס
+                    </a>
+                  )}
+                </div>
               </div>
 
               {screenshot && (

@@ -8,6 +8,7 @@ import TripHotels from './TripHotels';
 import TripBudget from './TripBudget';
 import TripLinks from './TripLinks';
 import TripTimeline from './TripTimeline';
+import TripEvents from './TripEvents';
 
 interface Props {
   trip: Trip;
@@ -16,13 +17,14 @@ interface Props {
   onTripUpdated: (t: Trip) => void;
 }
 
-type Tab = 'timeline' | 'overview' | 'flights' | 'hotels' | 'budget' | 'links';
+type Tab = 'timeline' | 'overview' | 'flights' | 'hotels' | 'events' | 'budget' | 'links';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'timeline', label: '🗺 מסלול' },
   { key: 'overview', label: 'סקירה' },
   { key: 'flights',  label: '✈ טיסות' },
   { key: 'hotels',   label: '🏨 לינה' },
+  { key: 'events',   label: '🎟 אירועים' },
   { key: 'budget',   label: '💰 הוצאות' },
   { key: 'links',    label: 'קישורים' },
 ];
@@ -89,8 +91,9 @@ const TripDetail: React.FC<Props> = ({ trip, user: _user, onBack, onTripUpdated 
         {activeTab === 'overview' && <TripOverview trip={trip} onTripUpdated={onTripUpdated} />}
         {activeTab === 'flights'  && <TripFlights  tripId={trip.id} />}
         {activeTab === 'hotels'   && <TripHotels   tripId={trip.id} />}
+        {activeTab === 'events'   && <TripEvents   trip={trip} />}
         {activeTab === 'budget'   && <TripBudget   tripId={trip.id} />}
-        {activeTab === 'links'    && <TripLinks    tripId={trip.id} />}
+        {activeTab === 'links'    && <TripLinks    tripId={trip.id} trip={trip} />}
       </div>
     </div>
   );

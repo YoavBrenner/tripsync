@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { TripPayment, PaymentCategory, PaymentStatus } from '../types';
-import { subscribePayments, addPayment, deletePayment } from '../services/tripService';
-import { Plus, Wallet, Trash2 } from 'lucide-react';
+import type { TripPayment, TripFlight, TripAccommodation, PaymentCategory, PaymentStatus } from '../types';
+import { subscribePayments, addPayment, deletePayment, subscribeFlights, subscribeHotels } from '../services/tripService';
+import { Plus, Wallet, Trash2, Plane, BedDouble } from 'lucide-react';
 
 interface Props {
   tripId: string;
@@ -65,14 +65,16 @@ const EMPTY_FORM = {
 
 const TripBudget: React.FC<Props> = ({ tripId }) => {
   const [payments, setPayments] = useState<TripPayment[]>([]);
+  const [flights,  setFlights]  = useState<TripFlight[]>([]);
+  const [hotels,   setHotels]   = useState<TripAccommodation[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
-  useEffect(() => {
-    return subscribePayments(tripId, setPayments);
-  }, [tripId]);
+  useEffect(() => subscribePayments(tripId, setPayments), [tripId]);
+  useEffect(() => subscribeFlights(tripId,  setFlights),  [tripId]);
+  useEffect(() => subscribeHotels(tripId,   setHotels),   [tripId]);
 
   const f = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
@@ -100,15 +102,18 @@ const TripBudget: React.FC<Props> = ({ tripId }) => {
     setPendingDelete(null);
   };
 
-  // Summary calculations (convert to ILS)
-  const totalILS = payments.reduce((sum, p) => sum + p.amount * (TO_ILS[p.currency] ?? 1), 0);
-  const paidILS  = payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount * (TO_ILS[p.currency] ?? 1), 0);
-  const leftILS  = totalILS - paidILS;
-  const totalUSD = totalILS / TO_ILS.USD;
-  const paidUSD  = paidILS  / TO_ILS.USD;
-  const leftUSD  = leftILS  / TO_ILS.USD;
+  // Auto costs from flights and hotels (convert to ILS)
+  const flightsWithPrice = flights.filter(f => f.price > 0);
+  const flightsILS = flightsWithPrice.reduce((sum, f) => sum + f.price * (TO_ILS[f.currency] ?? 1), 0);
 
-  // Category breakdown
+  const hotelsWithPrice = hotels.filter(h => h.price > 0);
+  const hotelsILS = hotelsWithPrice.reduce((sum, h) => sum + h.price * (TO_ILS[h.currency] ?? 1), 0);
+
+  const manualILS = payments.reduce((sum, p) => sum + p.amount * (TO_ILS[p.currency] ?? 1), 0);
+  const totalILS  = manualILS + flightsILS + hotelsILS;
+  const totalUSD  = totalILS / TO_ILS.USD;
+
+  // Category breakdown (manual payments only)
   const byCategory = CATEGORY_OPTIONS.map(cat => {
     const items = payments.filter(p => p.category === cat.value);
     const total = items.reduce((sum, p) => sum + p.amount * (TO_ILS[p.currency] ?? 1), 0);
@@ -132,42 +137,52 @@ const TripBudget: React.FC<Props> = ({ tripId }) => {
       </div>
 
       {/* Summary */}
-      {payments.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <p className="text-xs text-slate-400 font-medium mb-1">סה"כ</p>
-              <p className="font-black text-slate-800 text-lg">₪{Math.round(totalILS).toLocaleString()}</p>
-              <p className="text-xs text-slate-400">${Math.round(totalUSD).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium mb-1">שולם</p>
-              <p className="font-black text-green-600 text-lg">₪{Math.round(paidILS).toLocaleString()}</p>
-              <p className="text-xs text-slate-400">${Math.round(paidUSD).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium mb-1">נשאר</p>
-              <p className="font-black text-orange-500 text-lg">₪{Math.round(leftILS).toLocaleString()}</p>
-              <p className="text-xs text-slate-400">${Math.round(leftUSD).toLocaleString()}</p>
-            </div>
-          </div>
+      {(totalILS > 0 || flightsILS > 0 || hotelsILS > 0) && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
 
+          {/* Auto rows: flights + hotels */}
+          {(flightsILS > 0 || hotelsILS > 0) && (
+            <div className="space-y-2">
+              {flightsILS > 0 && (
+                <div className="flex items-center gap-3 py-2 px-3 bg-blue-50 rounded-xl">
+                  <Plane className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="text-sm text-slate-700 flex-1">טיסות</span>
+                  <span className="text-xs text-slate-400 ml-1">{flightsWithPrice.length} כרטיסים</span>
+                  <span className="font-bold text-slate-800 text-sm">₪{Math.round(flightsILS).toLocaleString()}</span>
+                </div>
+              )}
+              {hotelsILS > 0 && (
+                <div className="flex items-center gap-3 py-2 px-3 bg-purple-50 rounded-xl">
+                  <BedDouble className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                  <span className="text-sm text-slate-700 flex-1">לינות</span>
+                  <span className="text-xs text-slate-400 ml-1">{hotelsWithPrice.length} לינות</span>
+                  <span className="font-bold text-slate-800 text-sm">₪{Math.round(hotelsILS).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual breakdown */}
           {byCategory.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+            <div className="space-y-1.5">
               {byCategory.map(cat => (
                 <div key={cat.value} className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${CATEGORY_DOT[cat.value]}`} />
                   <span className="text-xs text-slate-600 flex-1">{cat.label}</span>
                   <span className="text-xs font-bold text-slate-700">₪{Math.round(cat.total).toLocaleString()}</span>
-                  {totalILS > 0 && (
-                    <span className="text-[10px] text-slate-400 w-8 text-left">
-                      {Math.round((cat.total / totalILS) * 100)}%
-                    </span>
-                  )}
                 </div>
               ))}
             </div>
           )}
+
+          {/* Grand total */}
+          <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+            <p className="text-sm font-bold text-slate-500">סה"כ הוצאות</p>
+            <div className="text-right">
+              <p className="font-black text-slate-800 text-xl">₪{Math.round(totalILS).toLocaleString()}</p>
+              <p className="text-xs text-slate-400">${Math.round(totalUSD).toLocaleString()}</p>
+            </div>
+          </div>
         </div>
       )}
 
